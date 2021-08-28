@@ -25,7 +25,6 @@ import java.util.Map;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
-import org.apache.hadoop.hive.ql.io.orc.OrcSplit;
 import org.apache.hadoop.hive.ql.io.orc.VectorizedOrcInputFormat;
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils;
 import org.apache.hadoop.io.NullWritable;
@@ -41,6 +40,7 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.io.InputFile;
+import org.apache.iceberg.mr.hive.io.OrcSplit;
 import org.apache.iceberg.mr.mapred.MapredIcebergInputFormat;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 
@@ -98,8 +98,7 @@ public class HiveVectorizedReader {
     try {
       switch (format) {
         case ORC:
-          InputSplit split = new OrcSplit(path, null, task.start(), task.length(), (String[]) null, null,
-              false, false, Lists.newArrayList(), 0, task.length(), path.getParent());
+          InputSplit split = new OrcSplit(path, task.start(), task.length(), task.length(), path.getParent());
           RecordReader<NullWritable, VectorizedRowBatch> recordReader = null;
 
           recordReader = new VectorizedOrcInputFormat().getRecordReader(split, job, reporter);
