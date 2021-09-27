@@ -22,6 +22,7 @@ package org.apache.iceberg;
 import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -73,6 +74,13 @@ class SchemaUpdate implements UpdateSchema {
    */
   SchemaUpdate(Schema schema, int lastColumnId) {
     this(null, null, schema, lastColumnId);
+  }
+
+  /**
+   * For testing only.
+   */
+  SchemaUpdate(TableMetadata base, Schema schema, int lastColumnId) {
+    this(null, base, schema, lastColumnId);
   }
 
   private SchemaUpdate(TableOperations ops, TableMetadata base) {
@@ -254,9 +262,16 @@ class SchemaUpdate implements UpdateSchema {
     if (field.type().equals(newType)) {
       return this;
     }
+    String format = (base == null) ? TableProperties.DEFAULT_FILE_FORMAT_DEFAULT :
+            base.properties().getOrDefault(TableProperties.DEFAULT_FILE_FORMAT,
+            TableProperties.DEFAULT_FILE_FORMAT_DEFAULT).toLowerCase(Locale.ROOT);
 
-    Preconditions.checkArgument(TypeUtil.isPromotionAllowed(field.type(), newType),
-        "Cannot change column type: %s: %s -> %s", name, field.type(), newType);
+    Boolean isInPartition = base != null && !this.base.spec().isUnpartitioned() &&
+            this.base.spec().fields().stream().anyMatch(p -> p.name().equals(name));
+    Preconditions.checkArgument(TypeUtil.isPromotionAllowed(field.type(), newType,
+                    isInPartition, "orc".equals(format)),
+        "Cannot change column type: %s: %s -> %s for %s format. The field is partition ? %s",
+            name, field.type(), newType, format, isInPartition);
 
     // merge with a rename, if present
     int fieldId = field.fieldId();

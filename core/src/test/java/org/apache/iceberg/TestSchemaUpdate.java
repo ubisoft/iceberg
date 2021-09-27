@@ -19,8 +19,10 @@
 
 package org.apache.iceberg;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableSet;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.relocated.com.google.common.collect.Sets;
@@ -30,9 +32,11 @@ import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.Pair;
 import org.junit.Assert;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import static org.apache.iceberg.types.Types.NestedField.optional;
 import static org.apache.iceberg.types.Types.NestedField.required;
+import static org.mockito.Mockito.when;
 
 public class TestSchemaUpdate {
   private static final Schema SCHEMA = new Schema(
@@ -176,6 +180,132 @@ public class TestSchemaUpdate {
             () -> new SchemaUpdate(fromSchema, 1).updateColumn("col", toType));
       }
     }
+  }
+
+  @Test
+  public void testUpdateNumberOrcNotPartitioned() {
+    Types.StructType expected = Types.StructType.of(
+        required(1, "id", Types.FloatType.get()),
+        optional(2, "data", Types.StringType.get()),
+        optional(3, "preferences", Types.StructType.of(
+        required(8, "feature1", Types.BooleanType.get()),
+        optional(9, "feature2", Types.BooleanType.get())
+      ), "struct of named boolean options"),
+        required(4, "locations", Types.MapType.ofRequired(10, 11,
+        Types.StructType.of(
+          required(20, "address", Types.StringType.get()),
+          required(21, "city", Types.StringType.get()),
+          required(22, "state", Types.StringType.get()),
+          required(23, "zip", Types.IntegerType.get())
+        ),
+        Types.StructType.of(
+          required(12, "lat", Types.FloatType.get()),
+          required(13, "long", Types.FloatType.get())
+       )), "map of address to coordinate"),
+        optional(5, "points", Types.ListType.ofOptional(14,
+        Types.StructType.of(
+          required(15, "x", Types.FloatType.get()),
+          required(16, "y", Types.DoubleType.get())
+        )), "2-D cartesian points"),
+        required(6, "doubles", Types.ListType.ofRequired(17,
+          Types.DoubleType.get()
+        )),
+        optional(7, "properties", Types.MapType.ofOptional(18, 19,
+          Types.StringType.get(),
+          Types.StringType.get()
+        ), "string map of properties")
+    );
+    PartitionSpec spec = Mockito.mock(PartitionSpec.class);
+    when(spec.isUnpartitioned()).thenReturn(true);
+    TableMetadata base = Mockito.mock(TableMetadata.class);
+    when(base.properties()).thenReturn(ImmutableMap.of("write.format.default", "orc"));
+    when(base.spec()).thenReturn(spec);
+    Schema updated = new SchemaUpdate(base, SCHEMA, SCHEMA_LAST_COLUMN_ID)
+        .updateColumn("id", Types.FloatType.get())
+        .updateColumn("points.x", Types.FloatType.get())
+        .updateColumn("points.y", Types.DoubleType.get())
+        .apply();
+
+    Assert.assertEquals("Should convert types", expected, updated.asStruct());
+  }
+
+  @Test
+  public void testUpdateNumberOrcPartitionedUpdateNotInThePartition() {
+    Types.StructType expected = Types.StructType.of(
+        required(1, "id", Types.DoubleType.get()),
+        optional(2, "data", Types.StringType.get()),
+        optional(3, "preferences", Types.StructType.of(
+          required(8, "feature1", Types.BooleanType.get()),
+          optional(9, "feature2", Types.BooleanType.get())
+      ), "struct of named boolean options"),
+        required(4, "locations", Types.MapType.ofRequired(10, 11,
+          Types.StructType.of(
+            required(20, "address", Types.StringType.get()),
+            required(21, "city", Types.StringType.get()),
+            required(22, "state", Types.StringType.get()),
+            required(23, "zip", Types.IntegerType.get())
+          ),
+          Types.StructType.of(
+            required(12, "lat", Types.FloatType.get()),
+            required(13, "long", Types.FloatType.get())
+          )), "map of address to coordinate"),
+          optional(5, "points", Types.ListType.ofOptional(14,
+            Types.StructType.of(
+              required(15, "x", Types.LongType.get()),
+              required(16, "y", Types.LongType.get())
+            )), "2-D cartesian points"),
+            required(6, "doubles", Types.ListType.ofRequired(17,
+              Types.DoubleType.get()
+            )),
+            optional(7, "properties", Types.MapType.ofOptional(18, 19,
+              Types.StringType.get(),
+              Types.StringType.get()
+            ), "string map of properties")
+    );
+    PartitionField field = Mockito.mock(PartitionField.class);
+    when(field.name()).thenReturn("data");
+    PartitionSpec spec = Mockito.mock(PartitionSpec.class);
+    when(spec.isUnpartitioned()).thenReturn(false);
+    when(spec.fields()).thenReturn(Arrays.asList(field));
+    TableMetadata base = Mockito.mock(TableMetadata.class);
+    when(base.properties()).thenReturn(ImmutableMap.of("write.format.default", "orc"));
+    when(base.spec()).thenReturn(spec);
+    Schema updated = new SchemaUpdate(base, SCHEMA, SCHEMA_LAST_COLUMN_ID)
+        .updateColumn("id", Types.DoubleType.get()).apply();
+
+    Assert.assertEquals("Should convert types", expected, updated.asStruct());
+  }
+
+  @Test
+  public void testUpdateFailureNumberNotOrc() {
+    PartitionSpec spec = Mockito.mock(PartitionSpec.class);
+    when(spec.isUnpartitioned()).thenReturn(false);
+    TableMetadata base = Mockito.mock(TableMetadata.class);
+    when(base.properties()).thenReturn(ImmutableMap.of("write.format.default", "parquet"));
+    when(base.spec()).thenReturn(spec);
+
+    AssertHelpers.assertThrows("Should reject update: ",
+           IllegalArgumentException.class, "for parquet format",
+           () -> new SchemaUpdate(base, SCHEMA, SCHEMA_LAST_COLUMN_ID)
+                   .updateColumn("id", Types.DoubleType.get())
+    );
+  }
+
+  @Test
+  public void testUpdateFailureNumberOOrcPartitionedUpdateInThePartition() {
+    PartitionField field = Mockito.mock(PartitionField.class);
+    when(field.name()).thenReturn("id");
+    PartitionSpec spec = Mockito.mock(PartitionSpec.class);
+    when(spec.isUnpartitioned()).thenReturn(false);
+    when(spec.fields()).thenReturn(Arrays.asList(field));
+    TableMetadata base = Mockito.mock(TableMetadata.class);
+    when(base.properties()).thenReturn(ImmutableMap.of("write.format.default", "orc"));
+    when(base.spec()).thenReturn(spec);
+    AssertHelpers.assertThrows("Should reject update: ",
+            IllegalArgumentException.class, "The field is partition ? true",
+            () -> new SchemaUpdate(base, SCHEMA, SCHEMA_LAST_COLUMN_ID)
+                    .updateColumn("id", Types.DoubleType.get())
+    );
   }
 
   @Test

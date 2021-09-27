@@ -76,6 +76,40 @@ public class TestBuildOrcProjection {
   }
 
   @Test
+  public void testProjectionNumberPrimitive() {
+    Schema originalSchema = new Schema(
+        optional(1, "a", Types.IntegerType.get()),
+        optional(2, "b", Types.IntegerType.get()),
+        optional(3, "c", Types.IntegerType.get()),
+        optional(4, "d", Types.LongType.get()),
+        optional(5, "e", Types.LongType.get()),
+        optional(6, "f", Types.FloatType.get())
+    );
+
+    // Original mapping (stored in ORC)
+    TypeDescription orcSchema = ORCSchemaUtil.convert(originalSchema);
+
+    // Evolve schema
+    Schema evolveSchema = new Schema(
+        optional(1, "a", Types.LongType.get()),
+        optional(2, "b", Types.FloatType.get()),
+        optional(3, "c", Types.DoubleType.get()),
+        optional(4, "d", Types.FloatType.get()),
+        optional(5, "e", Types.DoubleType.get()),
+        optional(6, "f", Types.DoubleType.get())
+    );
+
+    TypeDescription newOrcSchema = ORCSchemaUtil.buildOrcProjection(evolveSchema, orcSchema);
+    assertEquals(6, newOrcSchema.getChildren().size());
+    assertEquals(TypeDescription.Category.LONG, newOrcSchema.findSubtype("a").getCategory());
+    assertEquals(TypeDescription.Category.FLOAT, newOrcSchema.findSubtype("b").getCategory());
+    assertEquals(TypeDescription.Category.DOUBLE, newOrcSchema.findSubtype("c").getCategory());
+    assertEquals(TypeDescription.Category.FLOAT, newOrcSchema.findSubtype("d").getCategory());
+    assertEquals(TypeDescription.Category.DOUBLE, newOrcSchema.findSubtype("e").getCategory());
+    assertEquals(TypeDescription.Category.DOUBLE, newOrcSchema.findSubtype("f").getCategory());
+  }
+
+  @Test
   public void testProjectionNestedNoOp() {
     Types.StructType nestedStructType = Types.StructType.of(
         optional(2, "b", Types.StringType.get()),

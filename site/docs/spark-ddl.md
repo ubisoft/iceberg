@@ -209,11 +209,13 @@ Note that nested rename commands only rename the leaf field. The above command r
 
 Alter column is used to widen types, make a field optional, set comments, and reorder fields.
 
-Iceberg allows updating column types if the update is safe. Safe updates are:
+Iceberg allows updating column types if the update is safe. Safe updates for all format are:
 
 * `int` to `bigint`
 * `float` to `double`
 * `decimal(P,S)` to `decimal(P2,S)` when P2 > P (scale cannot change)
+
+Iceberg Orc format allow `int`, `bigint` to `float`, `double` if the field it's not already in the partition specification.
 
 ```sql
 ALTER TABLE prod.db.sample ALTER COLUMN measurement TYPE double

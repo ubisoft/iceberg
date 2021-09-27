@@ -19,6 +19,7 @@
 
 package org.apache.iceberg.orc;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -353,9 +354,18 @@ public final class ORCSchemaUtil {
         TypeDescription.Category.INT.equals(originalOrcType.getCategory())) {
       // Promote: int to long
       promotedOrcType = TypeDescription.createLong();
+    } else if (Type.TypeID.FLOAT.equals(icebergType.typeId()) &&
+            Arrays.asList(TypeDescription.Category.INT, TypeDescription.Category.LONG).contains(
+                    originalOrcType.getCategory()
+            )) {
+      // Promote: int or long to float
+      promotedOrcType = TypeDescription.createFloat();
     } else if (Type.TypeID.DOUBLE.equals(icebergType.typeId()) &&
-        TypeDescription.Category.FLOAT.equals(originalOrcType.getCategory())) {
-      // Promote: float to double
+            Arrays.asList(TypeDescription.Category.INT, TypeDescription.Category.LONG,
+                    TypeDescription.Category.FLOAT).contains(
+                    originalOrcType.getCategory()
+            )) {
+      // Promote: int, long or float to double
       promotedOrcType = TypeDescription.createDouble();
     } else if (Type.TypeID.DECIMAL.equals(icebergType.typeId()) &&
         TypeDescription.Category.DECIMAL.equals(originalOrcType.getCategory())) {

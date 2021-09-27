@@ -57,7 +57,7 @@ public class TestReadabilityChecks {
         List<String> errors = CheckCompatibility.writeCompatibilityErrors(
             new Schema(required(1, "to_field", to)), fromSchema);
 
-        if (TypeUtil.isPromotionAllowed(from, to)) {
+        if (TypeUtil.isPromotionAllowed(from, to, false, false)) {
           Assert.assertEquals("Should produce 0 error messages", 0, errors.size());
         } else {
           Assert.assertEquals("Should produce 1 error message", 1, errors.size());

@@ -19,6 +19,7 @@
 
 package org.apache.iceberg.types;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -273,7 +274,8 @@ public class TypeUtil {
     return visit(schema, new FindTypeVisitor(predicate));
   }
 
-  public static boolean isPromotionAllowed(Type from, Type.PrimitiveType to) {
+  public static boolean isPromotionAllowed(Type from, Type.PrimitiveType to,
+                                           Boolean isInPartition, Boolean canUpcastNumber) {
     // Warning! Before changing this function, make sure that the type change doesn't introduce
     // compatibility problems in partitioning.
     if (from.equals(to)) {
@@ -282,8 +284,17 @@ public class TypeUtil {
 
     switch (from.typeId()) {
       case INTEGER:
+        if (!isInPartition && canUpcastNumber) {
+          return Arrays.asList(Types.LongType.get(), Types.FloatType.get(), Types.DoubleType.get())
+                  .contains(to);
+        }
         return to == Types.LongType.get();
 
+      case LONG:
+        if (!isInPartition && canUpcastNumber) {
+          return Arrays.asList(Types.FloatType.get(), Types.DoubleType.get()).contains(to);
+        }
+        return false;
       case FLOAT:
         return to == Types.DoubleType.get();
 
