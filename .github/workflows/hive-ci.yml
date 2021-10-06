@@ -82,6 +82,8 @@ jobs:
       SPARK_LOCAL_IP: localhost
     steps:
     - uses: actions/checkout@v2
+    - name: Update update-ca-certificates
+      run: sudo update-ca-certificates
     - uses: actions/setup-java@v1
       with:
         java-version: 8

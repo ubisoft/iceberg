@@ -20,6 +20,8 @@
 package org.apache.iceberg.mr.hive;
 
 import java.util.Objects;
+import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.JobContext;
 import org.apache.hadoop.mapred.JobContextImpl;
@@ -27,6 +29,7 @@ import org.apache.hadoop.mapred.TaskAttemptContext;
 import org.apache.hadoop.mapred.TaskAttemptContextImpl;
 import org.apache.hadoop.mapred.TaskAttemptID;
 import org.apache.hadoop.mapreduce.JobID;
+import org.apache.iceberg.mr.InputFormatConfig;
 
 public class TezUtil {
 
@@ -77,6 +80,22 @@ public class TezUtil {
     } else {
       return jobID;
     }
+  }
+
+  public static boolean isVectorized(JobConf job) {
+    return HiveConf.getBoolVar(job, HiveConf.ConfVars.HIVE_VECTORIZATION_ENABLED) &&
+        Utilities.getVectorizedRowBatchCtx(job) != null;
+  }
+
+  public static void setInMemoryDataModel(JobConf job) {
+    boolean isVectorized = isVectorized(job);
+    job.setEnum(InputFormatConfig.IN_MEMORY_DATA_MODEL, isVectorized ?
+        InputFormatConfig.InMemoryDataModel.HIVE :
+        InputFormatConfig.InMemoryDataModel.GENERIC);
+  }
+
+  public static void skipResidualFiltering(JobConf job) {
+    job.setBoolean(InputFormatConfig.SKIP_RESIDUAL_FILTERING, isVectorized(job));
   }
 
   private TezUtil() {

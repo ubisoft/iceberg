@@ -29,8 +29,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.TaskAttemptID;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.RecordReader;
@@ -52,8 +50,7 @@ import org.apache.iceberg.data.Record;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.hadoop.HadoopCatalog;
 import org.apache.iceberg.hadoop.HadoopTables;
-import org.apache.iceberg.mr.mapred.Container;
-import org.apache.iceberg.mr.mapred.MapredIcebergInputFormat;
+import org.apache.iceberg.mr.mapred.TestMapredIcebergInputFormat;
 import org.apache.iceberg.mr.mapreduce.IcebergInputFormat;
 import org.apache.iceberg.mr.mapreduce.IcebergSplit;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
@@ -208,21 +205,21 @@ public class TestIcebergInputFormats {
     helper.appendToTable(Row.of("2020-03-20", 0), expectedRecords);
 
     builder.useHiveRows()
-           .filter(Expressions.and(
-                   Expressions.equal("date", "2020-03-20"),
-                   Expressions.equal("id", 0)));
+            .filter(Expressions.and(
+                    Expressions.equal("date", "2020-03-20"),
+                    Expressions.equal("id", 0)));
 
     AssertHelpers.assertThrows(
-        "Residuals are not evaluated today for Iceberg Generics In memory model of HIVE",
-        UnsupportedOperationException.class, "Filter expression ref(name=\"id\") == 0 is not completely satisfied.",
-        () -> testInputFormat.create(builder.conf()));
+            "Residuals are not evaluated today for Iceberg Generics In memory model of HIVE",
+            UnsupportedOperationException.class, "Filter expression ref(name=\"id\") == 0 is not completely satisfied.",
+            () -> testInputFormat.create(builder.conf()));
 
     builder.usePigTuples();
 
     AssertHelpers.assertThrows(
-        "Residuals are not evaluated today for Iceberg Generics In memory model of PIG",
-        UnsupportedOperationException.class, "Filter expression ref(name=\"id\") == 0 is not completely satisfied.",
-        () -> testInputFormat.create(builder.conf()));
+            "Residuals are not evaluated today for Iceberg Generics In memory model of PIG",
+            UnsupportedOperationException.class, "Filter expression ref(name=\"id\") == 0 is not completely satisfied.",
+            () -> testInputFormat.create(builder.conf()));
   }
 
   @Test
@@ -353,9 +350,9 @@ public class TestIcebergInputFormats {
     conf.set("warehouse.location", warehouseLocation);
     conf.set(InputFormatConfig.CATALOG_NAME, Catalogs.ICEBERG_DEFAULT_CATALOG_NAME);
     conf.set(InputFormatConfig.catalogPropertyConfigKey(Catalogs.ICEBERG_DEFAULT_CATALOG_NAME,
-        CatalogUtil.ICEBERG_CATALOG_TYPE), CatalogUtil.ICEBERG_CATALOG_TYPE_HADOOP);
+            CatalogUtil.ICEBERG_CATALOG_TYPE), CatalogUtil.ICEBERG_CATALOG_TYPE_HADOOP);
     conf.set(InputFormatConfig.catalogPropertyConfigKey(Catalogs.ICEBERG_DEFAULT_CATALOG_NAME,
-        CatalogProperties.WAREHOUSE_LOCATION), warehouseLocation);
+            CatalogProperties.WAREHOUSE_LOCATION), warehouseLocation);
 
     Catalog catalog = new HadoopCatalog(conf, conf.get("warehouse.location"));
     TableIdentifier identifier = TableIdentifier.of("db", "t");
@@ -377,7 +374,7 @@ public class TestIcebergInputFormats {
     private final List<IcebergSplit> splits;
     private final List<T> records;
 
-    private TestInputFormat(List<IcebergSplit> splits, List<T> records) {
+    public TestInputFormat(List<IcebergSplit> splits, List<T> records) {
       this.splits = splits;
       this.records = records;
     }
@@ -416,45 +413,6 @@ public class TestIcebergInputFormats {
           return String.format("Test%s<T>", name());
         }
       };
-    }
-  }
-
-  private static final class TestMapredIcebergInputFormat<T> extends TestInputFormat<T> {
-
-    private TestMapredIcebergInputFormat(List<IcebergSplit> splits, List<T> records) {
-      super(splits, records);
-    }
-
-    private static <T> TestMapredIcebergInputFormat<T> create(Configuration conf) {
-      JobConf job = new JobConf(conf);
-      MapredIcebergInputFormat<T> inputFormat = new MapredIcebergInputFormat<>();
-
-      try {
-        org.apache.hadoop.mapred.InputSplit[] splits = inputFormat.getSplits(job, 1);
-
-        List<IcebergSplit> iceSplits = new ArrayList<>(splits.length);
-        List<T> records = new ArrayList<>();
-
-        for (org.apache.hadoop.mapred.InputSplit split : splits) {
-          iceSplits.add((IcebergSplit) split);
-          org.apache.hadoop.mapred.RecordReader<Void, Container<T>>
-                  reader = inputFormat.getRecordReader(split, job, Reporter.NULL);
-
-          try {
-            Container<T> container = reader.createValue();
-
-            while (reader.next(null, container)) {
-              records.add(container.get());
-            }
-          } finally {
-            reader.close();
-          }
-        }
-
-        return new TestMapredIcebergInputFormat<>(iceSplits, records);
-      } catch (IOException ioe) {
-        throw new UncheckedIOException(ioe);
-      }
     }
   }
 
