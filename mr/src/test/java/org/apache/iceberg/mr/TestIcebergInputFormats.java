@@ -208,21 +208,21 @@ public class TestIcebergInputFormats {
     helper.appendToTable(Row.of("2020-03-20", 0), expectedRecords);
 
     builder.useHiveRows()
-           .filter(Expressions.and(
-                   Expressions.equal("date", "2020-03-20"),
-                   Expressions.equal("id", 0)));
+            .filter(Expressions.and(
+                    Expressions.equal("date", "2020-03-20"),
+                    Expressions.equal("id", 0)));
 
     AssertHelpers.assertThrows(
-        "Residuals are not evaluated today for Iceberg Generics In memory model of HIVE",
-        UnsupportedOperationException.class, "Filter expression ref(name=\"id\") == 0 is not completely satisfied.",
-        () -> testInputFormat.create(builder.conf()));
+            "Residuals are not evaluated today for Iceberg Generics In memory model of HIVE",
+            UnsupportedOperationException.class, "Filter expression ref(name=\"id\") == 0 is not completely satisfied.",
+            () -> testInputFormat.create(builder.conf()));
 
     builder.usePigTuples();
 
     AssertHelpers.assertThrows(
-        "Residuals are not evaluated today for Iceberg Generics In memory model of PIG",
-        UnsupportedOperationException.class, "Filter expression ref(name=\"id\") == 0 is not completely satisfied.",
-        () -> testInputFormat.create(builder.conf()));
+            "Residuals are not evaluated today for Iceberg Generics In memory model of PIG",
+            UnsupportedOperationException.class, "Filter expression ref(name=\"id\") == 0 is not completely satisfied.",
+            () -> testInputFormat.create(builder.conf()));
   }
 
   @Test
@@ -353,9 +353,9 @@ public class TestIcebergInputFormats {
     conf.set("warehouse.location", warehouseLocation);
     conf.set(InputFormatConfig.CATALOG_NAME, Catalogs.ICEBERG_DEFAULT_CATALOG_NAME);
     conf.set(InputFormatConfig.catalogPropertyConfigKey(Catalogs.ICEBERG_DEFAULT_CATALOG_NAME,
-        CatalogUtil.ICEBERG_CATALOG_TYPE), CatalogUtil.ICEBERG_CATALOG_TYPE_HADOOP);
+            CatalogUtil.ICEBERG_CATALOG_TYPE), CatalogUtil.ICEBERG_CATALOG_TYPE_HADOOP);
     conf.set(InputFormatConfig.catalogPropertyConfigKey(Catalogs.ICEBERG_DEFAULT_CATALOG_NAME,
-        CatalogProperties.WAREHOUSE_LOCATION), warehouseLocation);
+            CatalogProperties.WAREHOUSE_LOCATION), warehouseLocation);
 
     Catalog catalog = new HadoopCatalog(conf, conf.get("warehouse.location"));
     TableIdentifier identifier = TableIdentifier.of("db", "t");
