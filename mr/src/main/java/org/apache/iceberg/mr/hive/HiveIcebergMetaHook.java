@@ -19,12 +19,23 @@
 
 package org.apache.iceberg.mr.hive;
 
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hive.metastore.DefaultHiveMetaHook;
 import org.apache.hadoop.hive.metastore.HiveMetaHook;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
+import org.apache.hadoop.hive.metastore.api.MetaException;
+import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.JobContext;
+import org.apache.hadoop.mapred.JobContextImpl;
+import org.apache.hadoop.mapred.JobID;
+import org.apache.hadoop.mapred.JobStatus;
+import org.apache.hadoop.mapred.OutputCommitter;
 import org.apache.iceberg.BaseMetastoreTableOperations;
 import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.PartitionSpec;
@@ -48,7 +59,7 @@ import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class HiveIcebergMetaHook implements HiveMetaHook {
+public class HiveIcebergMetaHook extends DefaultHiveMetaHook implements HiveMetaHook {
   private static final Logger LOG = LoggerFactory.getLogger(HiveIcebergMetaHook.class);
   private static final Set<String> PARAMETERS_TO_REMOVE = ImmutableSet
       .of(InputFormatConfig.TABLE_SCHEMA, Catalogs.LOCATION, Catalogs.NAME);
@@ -261,5 +272,84 @@ public class HiveIcebergMetaHook implements HiveMetaHook {
     } else {
       return PartitionSpec.unpartitioned();
     }
+  }
+
+  @Override
+  public void commitInsertTable(org.apache.hadoop.hive.metastore.api.Table table, boolean overwrite)
+          throws MetaException {
+    String tableName = TableIdentifier.of(table.getDbName(), table.getTableName()).toString();
+    JobContext jobContext = getJobContextForCommitOrAbort(tableName, overwrite);
+    boolean failure = false;
+    try {
+      OutputCommitter committer = new HiveIcebergOutputCommitter();
+      committer.commitJob(jobContext);
+    } catch (Exception e) {
+      failure = true;
+      LOG.error("Error while trying to commit job", e);
+      throw new MetaException(stringifyException(e));
+    } finally {
+      // if there's a failure, the configs will still be needed in rollbackInsertTable
+      if (!failure) {
+        // avoid config pollution with prefixed/suffixed keys
+        cleanCommitConfig(tableName);
+      }
+    }
+  }
+
+  /**
+   * Make a string representation of the exception.
+   * @param throwable The exception to stringify
+   * @return A string with exception name and call stack.
+   */
+  public static String stringifyException(Throwable throwable) {
+    StringWriter stm = new StringWriter();
+    PrintWriter wrt = new PrintWriter(stm);
+    throwable.printStackTrace(wrt);
+    wrt.close();
+    return stm.toString();
+  }
+
+  @Override
+  public void preInsertTable(org.apache.hadoop.hive.metastore.api.Table table, boolean overwrite) {
+    // do nothing
+  }
+
+  @Override
+  public void rollbackInsertTable(org.apache.hadoop.hive.metastore.api.Table table, boolean overwrite) {
+    String tableName = TableIdentifier.of(table.getDbName(), table.getTableName()).toString();
+    JobContext jobContext = getJobContextForCommitOrAbort(tableName, overwrite);
+    OutputCommitter committer = new HiveIcebergOutputCommitter();
+    try {
+      LOG.info("rollbackInsertTable: Aborting job for jobID: {} and table: {}", jobContext.getJobID(), tableName);
+      committer.abortJob(jobContext, JobStatus.State.FAILED);
+    } catch (IOException e) {
+      LOG.error("Error while trying to abort failed job. There might be uncleaned data files.", e);
+      // no throwing here because the original commitInsertTable exception should be propagated
+    } finally {
+      // avoid config pollution with prefixed/suffixed keys
+      cleanCommitConfig(tableName);
+    }
+  }
+
+
+  private void cleanCommitConfig(String tableName) {
+    conf.unset("hive.tez.commit.job.id." + tableName);
+    conf.unset("hive.tez.commit.task.count." + tableName);
+    conf.unset(InputFormatConfig.SERIALIZED_TABLE_PREFIX + tableName);
+    conf.unset(InputFormatConfig.OUTPUT_TABLES);
+  }
+
+  private JobContext getJobContextForCommitOrAbort(String tableName, boolean overwrite) {
+    JobConf jobConf = new JobConf(conf);
+    JobID jobID = JobID.forName(jobConf.get("hive.tez.commit.job.id." + tableName));
+    int numTasks = conf.getInt("hive.tez.commit.task.count." + tableName, -1);
+    jobConf.setNumReduceTasks(numTasks);
+    jobConf.setBoolean(InputFormatConfig.IS_OVERWRITE, overwrite);
+
+    // we should only commit this current table because
+    // for multi-table inserts, this hook method will be called sequentially for each target table
+    jobConf.set(InputFormatConfig.OUTPUT_TABLES, tableName);
+
+    return new JobContextImpl(jobConf, jobID, null);
   }
 }
