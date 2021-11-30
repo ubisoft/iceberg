@@ -461,6 +461,34 @@ public class TestHiveIcebergStorageHandlerWithEngine {
   }
 
   @Test
+  public void testVectorizationComplexDisable() throws IOException {
+    Schema complexSchema = new Schema(
+            optional(1, "st", Types.StringType.get()),
+            optional(2, "id", Types.LongType.get())
+    );
+    PartitionSpec spec = PartitionSpec.builderFor(complexSchema).identity("id").build();
+
+    List<Record> complexRecords = TestHelper.RecordsBuilder.newInstance(complexSchema)
+            .add("v11", 100L)
+            .add("v12", 100L)
+            .add("v21", 200L)
+            .add("v31", 300L)
+            .add("v32", 300L)
+            .build();
+
+    String tableName = "complex";
+    shell.executeStatement("DROP TABLE IF EXISTS default." + tableName);
+    testTables.createTable(shell, tableName, complexSchema, spec, fileFormat, complexRecords);
+
+    List<Object[]> rows = shell.executeStatement("SELECT st, min(id) as id FROM default." + tableName +
+            " where id > 100 group by st order by id"
+    );
+
+    Assert.assertEquals(3, rows.size());
+
+  }
+
+  @Test
   public void testWriteArrayOfPrimitivesInTable() throws IOException {
     Assume.assumeTrue("Tez write is not implemented yet", executionEngine.equals("mr"));
     Schema schema = new Schema(required(1, "id", Types.LongType.get()),
