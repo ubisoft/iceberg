@@ -41,6 +41,7 @@ import org.apache.iceberg.hive.MetastoreUtil;
 import org.apache.iceberg.mr.InputFormatConfig;
 import org.apache.iceberg.mr.TestHelper;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
+import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
@@ -705,6 +706,30 @@ public class TestHiveIcebergStorageHandlerWithEngine {
     // Check that everything is as expected
     HiveIcebergTestUtils.validateData(target1, target1Records, 0);
     HiveIcebergTestUtils.validateData(target2, target2Records, 1);
+  }
+
+  @Test
+  public void testStructMapWithNull() throws IOException {
+    Assume.assumeTrue("Failed on vectorized parquet for a bug in parquet vectorization",
+        !("PARQUET".equals(fileFormat.name()) && isVectorized));
+    Schema schema = new Schema(required(1, "id", Types.LongType.get()),
+        required(2, "mapofstructs", Types.MapType.ofRequired(3, 4, Types.StringType.get(),
+            Types.StructType.of(required(5, "something", Types.StringType.get()),
+                required(6, "someone", Types.StringType.get()),
+                required(7, "somewhere", Types.StringType.get())
+            ))
+        )
+    );
+
+    List<Record> records = TestHelper.RecordsBuilder.newInstance(schema)
+        .add(0L, ImmutableMap.of())
+        .build();
+
+    testTables.createTable(shell, "mapwithnull", schema, fileFormat, records);
+
+    List<Object[]> results = shell.executeStatement("select mapofstructs['context'].someone FROM mapwithnull");
+    Assert.assertEquals(1, results.size());
+    Assert.assertNull(results.get(0)[0]);
   }
 
   @Test
