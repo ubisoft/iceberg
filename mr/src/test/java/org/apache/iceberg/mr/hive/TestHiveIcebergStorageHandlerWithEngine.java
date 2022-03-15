@@ -710,8 +710,6 @@ public class TestHiveIcebergStorageHandlerWithEngine {
 
   @Test
   public void testStructMapWithNull() throws IOException {
-    Assume.assumeTrue("Failed on vectorized parquet for a bug in parquet vectorization",
-        !("PARQUET".equals(fileFormat.name()) && isVectorized));
     Schema schema = new Schema(required(1, "id", Types.LongType.get()),
         required(2, "mapofstructs", Types.MapType.ofRequired(3, 4, Types.StringType.get(),
             Types.StructType.of(required(5, "something", Types.StringType.get()),
